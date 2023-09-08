@@ -1,0 +1,55 @@
+version: '3.8'
+services:
+  mysql:
+    image: mysql:8.0
+    command: --innodb-use-native-aio=0
+    restart: always
+    tty: true
+    ports:
+      - "33060:3306"
+    volumes:
+      - ./.docker/mysql/dbdata:/var/lib/mysql
+    environment:
+      MYSQL_DATABASE: 'shopper-test'
+      MYSQL_ROOT_PASSWORD: '12345'
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+    networks:
+      - shopper-test
+  
+  backend:
+    depends_on:
+      mysql:
+        condition: service_healthy
+    build:
+      context: backend
+    entrypoint: /bin/sh -c "npx prisma migrate deploy && npm run start"
+    restart: always
+    tty: true
+    environment:
+      DATABASE_URL: 'mysql://root:12345@mysql:3306/shopper-test'
+      ALLOWED_ORIGIN: 'http://localhost:3001'
+    ports:
+      - "3000:3000"
+    networks:
+      - shopper-test
+  
+  frontend:
+    build:
+      context: frontend
+      args:
+        - NEXT_PUBLIC_APP_PRODUCT_API=http://localhost:3000/products
+    restart: always
+    tty: true
+    environment:
+      NEXT_PUBLIC_APP_PRODUCT_API: 'http://localhost:3000/products'
+    ports:
+      - "3001:3000"
+    networks:
+      - shopper-test
+
+networks:
+  shopper-test:
+    driver: bridge
